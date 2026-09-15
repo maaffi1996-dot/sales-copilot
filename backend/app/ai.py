@@ -1,34 +1,33 @@
 """
 Thin wrapper around the AI provider so the rest of the backend never talks
-to a specific SDK directly. This is the "swap the model later" abstraction
-layer discussed in planning: everything else in the app calls generate_insight()
-and answer_question(); only this file needs to change if you switch to a
-self-hosted open-source model instead of the Anthropic API (relevant given
-sanctions-related access constraints from Iran).
+to a specific SDK directly. Currently wired to DeepSeek (their billing
+accepted an Iranian-issued card during testing, unlike Anthropic's).
+DeepSeek's API is OpenAI-compatible, so we use the `openai` SDK pointed at
+DeepSeek's base URL.
 """
 import os
 
-from anthropic import Anthropic
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
-_client: Anthropic | None = None
+_client: OpenAI | None = None
 
 
-def get_client() -> Anthropic:
+def get_client() -> OpenAI:
     global _client
     if _client is None:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not api_key:
             raise RuntimeError(
-                "ANTHROPIC_API_KEY تنظیم نشده است. آن را در فایل .env قرار بده."
+                "DEEPSEEK_API_KEY تنظیم نشده است. آن را در فایل .env قرار بده."
             )
-        _client = Anthropic(api_key=api_key)
+        _client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
     return _client
 
 
-MODEL = "claude-sonnet-5"
+MODEL = "deepseek-chat"
 
 
 def generate_insight(summary: dict) -> str:
@@ -52,9 +51,9 @@ def answer_question(question: str, context: str) -> str:
 
 def _complete(prompt: str) -> str:
     client = get_client()
-    response = client.messages.create(
+    response = client.chat.completions.create(
         model=MODEL,
         max_tokens=1000,
         messages=[{"role": "user", "content": prompt}],
     )
-    return "".join(block.text for block in response.content if hasattr(block, "text")).strip()
+    return (response.choices[0].message.content or "").strip()
